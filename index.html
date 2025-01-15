@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShareFile API File Search and Download</title>
+    <script>
+        const sharefileApiUrl = 'https://noneapp.sharefile.com'; // Update with your subdomain
+        const parentPath = "/TEST-CUSTOMER UPLOADS (UNLIMITED RETENTION)/FILE UPLOADS";
+        const corsProxy = 'https://cors-anywhere.herokuapp.com/';
+        const accessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJTaGFyZUZpbGUiLCJzdWIiOiJlMmZiMDU0YS05NDdhLTRhODAtYTZlZi0zNDM5MDM3ZjMzMjAiLCJpYXQiOjE3MzY4OTA3NDYsImV4cCI6MTczNjkxOTU0NiwiYXVkIjoicEc5QmZteUpGbXcyeWQ1RE5mU0MzRXIxY25LUW50c0wiLCJzaGFyZWZpbGU6dG9rZW5pZCI6ImpPd3plUU1ZYkhzT1h0TTVnS09hR3hJQms3RXFsckdRJCRhOTFITjkxenhWQ3Z1ZTYzWThoQ28yM0RJN25LZEFmbiIsInNjb3BlIjoidjMgdjMtaW50ZXJuYWwiLCJzaGFyZWZpbGU6c3ViZG9tYWluIjoibm9uZWFwcCIsInNoYXJlZmlsZTphY2NvdW50aWQiOiJhOGY5NzAzNy0wNzBmLTA1MzMtYjQ3ZC1jZGZiOWE2NDBhNzcifQ.G351cMNV5C0VA2S6N69KheJr1sX10kYwm6rtr5Vu_Pk"; // Hardcoded token
+
+        async function getParentFolderId(path) {
+            const response = await fetch(`${corsProxy}${sharefileApiUrl}/sf/v3/Items/ByPath?path=${encodeURIComponent(path)}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Accept': 'application/json',
+                },
+            });
+
+            if (!response.ok) throw new Error("Error fetching parent folder ID. Check your access token or path.");
+            const data = await response.json();
+            return data.Id;
+        }
+
+        async function searchFileInFolder(folderId, filename) {
+            const response = await fetch(`${corsProxy}${sharefileApiUrl}/sf/v3/Items(${folderId})/Children`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Accept': 'application/json',
+                },
+            });
+
+            if (!response.ok) throw new Error("Error searching for files in folder.");
+            const data = await response.json();
+            return data.value.find(file => file.Name === filename);
+        }
+
+        async function downloadFile(fileId) {
+            const response = await fetch(`${corsProxy}${sharefileApiUrl}/sf/v3/Items(${fileId})/Download`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error("Error downloading the file. Check your authentication.");
+            }
+
+            const clonedResponse = response.clone(); // Clone the response to allow reading it twice
+
+            try {
+                const json = await response.json(); // Try parsing as JSON for a download URL
+                if (json.DownloadUrl) {
+                    window.open(json.DownloadUrl, '_blank'); // Open the download URL in a new tab
+                    return;
+                }
+            } catch {
+                // If parsing as JSON fails, treat the response as binary data
+                const blob = await clonedResponse.blob(); // Read the body as a blob
+                const downloadUrl = URL.createObjectURL(blob);
+
+                const fileName = response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || 'downloaded-file';
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = fileName;
+                a.click();
+            }
+        }
+
+        async function testSearch() {
+            const filename = document.getElementById("filename").value.trim();
+            const resultElement = document.getElementById("result");
+            resultElement.innerHTML = "";
+
+            if (!filename) {
+                resultElement.innerText = "Please enter a filename.";
+                return;
+            }
+
+            try {
+                const parentFolderId = await getParentFolderId(parentPath);
+                const file = await searchFileInFolder(parentFolderId, filename);
+
+                if (!file) {
+                    resultElement.innerText = "File not found.";
+                } else {
+                    await downloadFile(file.Id);
+                    resultElement.innerText = `File "${file.Name}" downloaded successfully.`;
+                }
+            } catch (error) {
+                console.error(error);
+                resultElement.innerText = "An error occurred: " + error.message;
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <h1>Search and Download File</h1>
+    <label for="filename">Filename:</label>
+    <input type="text" id="filename" placeholder="Enter filename (e.g., example.csv)">
+    <button onclick="testSearch()">Search and Download</button>
+    <div id="result"></div>
+</body>
+
+</html>
