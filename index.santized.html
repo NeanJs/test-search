@@ -25,7 +25,7 @@
             return data.Id;
         }
 
-        async function searchFileInFolder(folderId, filename) {
+        async function searchFilesInFolder(folderId, sanitizedFilename) {
             const response = await fetch(`${corsProxy}${sharefileApiUrl}/sf/v3/Items(${folderId})/Children`, {
                 method: 'GET',
                 headers: {
@@ -36,7 +36,12 @@
 
             if (!response.ok) throw new Error("Error searching for files in folder.");
             const data = await response.json();
-            return data.value.find(file => file.Name === filename);
+
+            // Filter files by sanitized name match
+            return data.value.filter(file => {
+                const sanitizedFileName = file.Name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                return sanitizedFileName.includes(sanitizedFilename);
+            });
         }
 
         async function downloadFile(fileId) {
